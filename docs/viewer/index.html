@@ -305,7 +305,21 @@ const cutPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
 const materials = [];
 const BOARD = ['pcb', 'heatsink', 'fan', 'connectors', 'nvme', 'button'];
 
-new GLTFLoader().load('scanner_case.glb', (g) => {
+// модель: рядом со страницей лежит scanner_case.glb (в репозитории)
+// или scanner_case.glb.txt — тот же файл в base64 (в опубликованной странице)
+async function loadModel() {
+  let r = await fetch('scanner_case.glb').catch(() => null);
+  if (r && r.ok && !(r.headers.get('content-type') || '').includes('text/html')) return r.arrayBuffer();
+  r = await fetch('scanner_case.glb.txt');
+  if (!r.ok) throw new Error('model');
+  const bin = atob((await r.text()).trim());
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+const onModelError = () => { $('#glfail').textContent = 'Модель не загрузилась. Обновите страницу.'; $('#glfail').hidden = false; };
+loadModel().then((ab) => new GLTFLoader().parse(ab, '', onModel, onModelError)).catch(onModelError);
+function onModel(g) {
   const meshes = [];
   g.scene.traverse((o) => { if (o.isMesh) meshes.push(o); });
   for (const o of meshes) {
@@ -320,7 +334,7 @@ new GLTFLoader().load('scanner_case.glb', (g) => {
   }
   setView('q', true);
   apply();
-}, undefined, () => { $('#glfail').textContent = 'Модель не загрузилась. Обновите страницу.'; $('#glfail').hidden = false; });
+}
 
 /* ---------- состояние ---------- */
 const state = { mode: 'asm', board: true, cut: false, cutX: 0, feat: null };
