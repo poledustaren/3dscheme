@@ -309,4 +309,4 @@ def write_project(posed: dict[str, Manifold], path: str, title: str,
         for i, (big, small) in sorted(thumbnails.items()):
             add(z, f"Metadata/plate_{i}.png", big)
             add(z, f"Metadata/plate_{i}_small.png", small)
-    return {"файл": os.path.relpath(path), "размер_МБ": round(os.path.getsize(path) / 1e6, 2)}
+    return {"файл": os.path.relpath(path, os.path.dirname(os.path.dirname(os.path.abspath(path)))), "размер_МБ": round(os.path.getsize(path) / 1e6, 2)}
