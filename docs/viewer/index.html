@@ -1,0 +1,459 @@
+<title>Корпус сканера OPi6</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen split — 3D stage dominates, a spec sheet scrolls beside it; stacks on phones */
+:root{
+  --ground:#E8ECE9; --stage:#DCE2DE; --sheet:#F4F6F4; --raised:#FFFFFF;
+  --ink:#141917; --muted:#5A6560; --rule:#CCD3CF;
+  --bronze:#8C5A2F; --bronze-ink:#FFFFFF; --ok:#2E7A55;
+  --f-display:'Unbounded','Arial Black',system-ui,sans-serif;
+  --f-body:'Golos Text',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0F1312; --stage:#181E1C; --sheet:#141917; --raised:#1C2321;
+    --ink:#E2E8E4; --muted:#93A19A; --rule:#29322E;
+    --bronze:#D49B63; --bronze-ink:#1A1109; --ok:#5DC18E; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0F1312; --stage:#181E1C; --sheet:#141917; --raised:#1C2321;
+  --ink:#E2E8E4; --muted:#93A19A; --rule:#29322E;
+  --bronze:#D49B63; --bronze-ink:#1A1109; --ok:#5DC18E; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--ground);color:var(--ink);font:400 15px/1.55 var(--f-body)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--bronze);outline-offset:2px}
+a{color:var(--bronze)}
+
+.app{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:16px;padding-inline:16px;padding-block:16px}
+.stage{position:relative;min-height:0;border-radius:16px;overflow:hidden;background:var(--stage);border:1px solid var(--rule)}
+#cv{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#cv:active{cursor:grabbing}
+.over{position:absolute;left:12px;right:12px;display:flex;justify-content:space-between;gap:10px;pointer-events:none;flex-wrap:wrap}
+.over>*{pointer-events:auto}
+.over.top{top:12px;align-items:flex-start}
+.over.bot{bottom:12px;align-items:flex-end}
+.hint{margin:0;font:400 12px/1.4 var(--f-mono);color:var(--muted);max-width:30ch}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:10px;background:color-mix(in srgb,var(--raised) 82%,transparent);border:1px solid var(--rule);backdrop-filter:blur(6px)}
+.seg button{border:0;background:transparent;color:var(--muted);font:500 13px/1 var(--f-body);padding:8px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--ground)}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--rule);background:color-mix(in srgb,var(--raised) 82%,transparent);backdrop-filter:blur(6px);border-radius:10px;padding:8px 11px;font:500 13px/1 var(--f-body);cursor:pointer}
+.chip i{width:12px;height:12px;border-radius:3px;border:1.5px solid var(--muted);display:inline-block}
+.chip[aria-pressed="true"]{border-color:var(--ink)}
+.chip[aria-pressed="true"] i{background:var(--bronze);border-color:var(--bronze)}
+.slider{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--rule);border-radius:10px;background:color-mix(in srgb,var(--raised) 82%,transparent);font:400 12px/1 var(--f-mono);color:var(--muted)}
+.slider input{width:130px;accent-color:var(--bronze)}
+.marker{position:absolute;left:0;top:0;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:2px solid var(--bronze);box-shadow:0 0 0 4px color-mix(in srgb,var(--bronze) 25%,transparent);pointer-events:none}
+.marker::after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--bronze)}
+.glfail{position:absolute;inset:auto 16px 45% 16px;text-align:center;color:var(--muted)}
+
+.sheet{min-height:0;overflow-y:auto;background:var(--sheet);border:1px solid var(--rule);border-radius:16px;padding:24px 22px 28px;display:flex;flex-direction:column;gap:28px}
+.eyebrow{margin:0;font:500 12px/1.3 var(--f-mono);color:var(--muted);letter-spacing:.02em}
+h1{margin:8px 0 10px;font:600 28px/1.08 var(--f-display);letter-spacing:-.01em;text-wrap:balance}
+.lede{margin:0;color:var(--muted);max-width:60ch}
+h2{margin:0 0 12px;font:600 11px/1 var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.figs{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}
+.fig b{display:block;font:500 19px/1.15 var(--f-display);font-variant-numeric:tabular-nums}
+.fig span{display:block;margin-top:4px;font-size:12.5px;line-height:1.4;color:var(--muted)}
+
+.feats{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.feat{width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:12px;padding:10px 12px;cursor:pointer;display:grid;gap:3px}
+.feat:hover{background:var(--raised);border-color:var(--rule)}
+.feat[aria-pressed="true"]{background:var(--raised);border-color:var(--bronze)}
+.feat b{font:600 15px/1.3 var(--f-body)}
+.feat .m{font:400 12px/1.4 var(--f-mono);color:var(--bronze)}
+.feat p{margin:2px 0 0;font-size:13.5px;color:var(--muted)}
+
+.meas{width:100%;border-collapse:collapse;font-size:13.5px}
+.meas td{padding:8px 0;border-top:1px solid var(--rule);vertical-align:top}
+.meas td:first-child{font:500 13px/1.4 var(--f-mono);white-space:nowrap;padding-right:14px;font-variant-numeric:tabular-nums}
+.meas td:last-child{color:var(--muted)}
+
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.checks li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:baseline;font-size:13.5px}
+.tag{font:500 10.5px/1 var(--f-mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;border-radius:5px;border:1px dashed var(--muted);color:var(--muted);white-space:nowrap}
+.tag.ok{border-style:solid;border-color:var(--ok);color:var(--ok)}
+.checks code{font:400 12px/1 var(--f-mono);color:var(--bronze)}
+
+.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
+.spec{margin:0 0 14px;font:400 12.5px/1.6 var(--f-mono);color:var(--muted)}
+.foot{margin:0;font:400 12px/1.55 var(--f-mono);color:var(--muted)}
+
+@media (max-width: 960px){
+  .app{height:auto;grid-template-columns:minmax(0,1fr)}
+  .stage{height:62svh;min-height:380px}
+  .sheet{overflow:visible}
+}
+@media (max-width: 560px){
+  .hint{display:none}
+  .over.top{justify-content:flex-end}
+  .slider input{width:96px}
+  h1{font-size:24px}
+}
+</style>
+
+<div class="app">
+  <section class="stage" aria-label="3D-модель корпуса">
+    <canvas id="cv"></canvas>
+    <div class="marker" id="marker" hidden></div>
+    <div class="over top">
+      <p class="hint">Тяните — вращать · колесо или щипок — масштаб · справа — узлы</p>
+      <div class="seg" role="group" aria-label="Режим">
+        <button type="button" id="mAsm" aria-pressed="true">Собран</button>
+        <button type="button" id="mExp" aria-pressed="false">Разнесён</button>
+        <button type="button" id="mBed" aria-pressed="false">На столе</button>
+      </div>
+    </div>
+    <div class="over bot">
+      <div class="seg" role="group" aria-label="Ракурс" id="views">
+        <button type="button" data-v="q" aria-pressed="true">¾</button>
+        <button type="button" data-v="front" aria-pressed="false">Спереди</button>
+        <button type="button" data-v="left" aria-pressed="false">Слева</button>
+        <button type="button" data-v="rear" aria-pressed="false">Сзади</button>
+        <button type="button" data-v="top" aria-pressed="false">Сверху</button>
+      </div>
+      <div class="tools">
+        <button type="button" class="chip" id="tBoard" aria-pressed="true"><i></i>Плата</button>
+        <button type="button" class="chip" id="tCut" aria-pressed="false"><i></i>Разрез</button>
+        <label class="slider" id="cutBox" hidden for="cutX">X <input type="range" id="cutX" min="-64" max="64" step="0.5" value="0"><span id="cutVal">0</span></label>
+      </div>
+    </div>
+    <p class="glfail" id="glfail" hidden>В этом браузере нет WebGL, поэтому 3D-модель не показать. Всё описано справа, а картинки лежат в репозитории.</p>
+  </section>
+
+  <aside class="sheet">
+    <header>
+      <p class="eyebrow">Orange Pi 6 Plus · корпус v1 · 12.10.2026</p>
+      <h1>Корпус сканера OPi6</h1>
+      <p class="lede">По образцу Aurora: серебристая крышка с фаской и круглой решёткой, тонкое бронзовое кольцо, строгий тёмный низ. Две печатные детали, ни одного винта. Плату держат площадки и стойки крышки, крышку — четыре защёлки, а кнопку питания нажимает гибкий язычок в стенке.</p>
+    </header>
+
+    <section class="figs" aria-label="В цифрах">
+      <div class="fig"><b>127 × 118 × 61</b><span>мм, ширина × глубина × высота</span></div>
+      <div class="fig"><b>≈ 126 г</b><span>обе детали в PLA или PETG, ASA ≈ 109 г</span></div>
+      <div class="fig"><b>0 винтов</b><span>защёлки, прижим стойками, язычок кнопки</span></div>
+      <div class="fig"><b>0 поддержек</b><span>наклоны не круче 45°, проверено по сетке</span></div>
+    </section>
+
+    <section>
+      <h2>Узлы</h2>
+      <ul class="feats" id="feats"></ul>
+    </section>
+
+    <section>
+      <h2>Ваши замеры в модели</h2>
+      <table class="meas">
+        <tbody>
+          <tr><td>115 × 100</td><td>Плата. По бокам 4 мм до стенки, у углов 1 мм, сзади 5,7 мм, спереди 8,2 мм под камеру выдува.</td></tr>
+          <tr><td>33 над</td><td>Кулер. Потолок крышки на 37 мм над платой: 4 мм воздуха под решёткой.</td></tr>
+          <tr><td>14 под</td><td>NVMe. Дно на 18 мм ниже платы: 4 мм под лепестки будущей рукояти.</td></tr>
+          <tr><td>PWR, 12 мм</td><td>Кнопка слева от разъёмов, в 12 мм от угла со стороны выдува. Напротив неё — язычок с толкателем.</td></tr>
+          <tr><td>выдув</td><td>Напротив разъёмов: там перфорация спереди, разъёмы — в проёме сзади.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Проверено моделью</h2>
+      <ul class="checks">
+        <li><span class="tag ok">0 мм³</span><span>Пересечений с платой, разъёмами, кулером и NVMe нет. Плата опускается в низ корпуса сверху без помех.</span></li>
+        <li><span class="tag ok">0,49 мм</span><span>Зазор от толкателя до кнопки PWR в покое. Нажатие ≈ 0,8 мм, усилие ≈ 4–5 Н.</span></li>
+        <li><span class="tag ok">0,1 мм</span><span>Натяг стоек крышки на плату: она зажата и не болтается.</span></li>
+        <li><span class="tag ok">7 мм²</span><span>Всё, что круче 45°, — край углубления кнопки. Печатается без поддержек.</span></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Сверить с платой до печати</h2>
+      <ul class="checks">
+        <li><span class="tag">допущение</span><span>Центр толкателя PWR на 1,8 мм выше платы, выступает за край на 0,8 мм. <code>btn_z</code> <code>btn_protrude</code></span></li>
+        <li><span class="tag">допущение</span><span>Центр кнопки в 12 мм от угла. По фото похоже на 9–10 мм, толкатель шириной 6 мм перекроет оба случая. <code>btn_from_corner</code></span></li>
+        <li><span class="tag">допущение</span><span>Самый высокий разъём не выше 17,5 мм над платой, иначе поднимется линия разъёма корпуса. <code>conn_h</code></span></li>
+        <li><span class="tag">допущение</span><span>Крепёжные отверстия в 3,5 мм от краёв, углы 7 × 7 мм над и под платой свободны: туда давят стойки и ложатся площадки. <code>hole_inset</code></span></li>
+        <li><span class="tag">допущение</span><span>Разъёмы идут вдоль длинного ребра 115 мм и не ближе 5 мм к углам. <code>conn_corner</code></span></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Печать и сборка</h2>
+      <p class="spec">PETG или ASA · слой 0,2 мм · 3–4 периметра · заполнение 15 % · без поддержек<br>Низ — дном на стол, на высоте 37,7 мм смена филамента на бронзовый. Крышка — верхом на стол.</p>
+      <ol class="steps">
+        <li>Опустите плату в низ корпуса разъёмами в проём сзади, углами на площадки.</li>
+        <li>Наденьте крышку сверху и прижмите до щелчка четырёх защёлок.</li>
+        <li>Чтобы снять, потяните крышку вверх за край над разъёмами.</li>
+      </ol>
+    </section>
+
+    <p class="foot">STL обеих деталей, параметрический исходник на Python и отчёт проверок лежат в репозитории <a href="https://github.com/poledustaren/3dscheme/tree/claude/continue-collected-data-ub81vw" target="_blank" rel="noopener">poledustaren/3dscheme</a>, ветка claude/continue-collected-data-ub81vw. Плата и кулер на модели условные, по вашим замерам. Следующий шаг — рукоять на байонет в дне.</p>
+  </aside>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const $ = (s) => document.querySelector(s);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const rad = THREE.MathUtils.degToRad;
+
+/* узлы: точка в координатах модели (мм, Z вверх), ракурс и режим */
+const FEATS = [
+  { id: 'grille', name: 'Решётка сверху', meta: '755 отверстий Ø 2 мм · кольца с шагом 3 мм · Ø 92 мм',
+    text: 'Кулер берёт воздух сверху. Решётка из концентрических колец, как у образца; под ней 4 мм свободного места до кулера.',
+    p: [0, 1.2, 40.6], az: 20, el: 58, d: 1.7, mode: 'asm', lid: true },
+  { id: 'perf', name: 'Выдув спереди', meta: '133 отверстия Ø 2,4 мм с остриями · сетка 3,4 мм',
+    text: 'Рёбра радиатора дуют вперёд, в камеру глубиной 8 мм. Отверстия идут одной сеткой по низу и крышке. Острые верх и низ печатаются без мостов в обеих деталях. Остаток воздуха уходит в решётку в дне.',
+    p: [0, 59.2, 12], az: 10, el: 10, d: 1.6, mode: 'asm' },
+  { id: 'button', name: 'Кнопка питания', meta: 'язычок 20 × 11 мм · толкатель 6 × 3 мм · зазор 0,49 мм',
+    text: 'Язычок вырезан в левом борту наклонными щелями, корень у разъёмов. Толкатель нажимает PWR на плате напрямую, без пружин. Площадка утоплена на 0,6 мм, чтобы кнопку не задеть случайно; на ней точка под палец.',
+    p: [-63.5, 38, 3.4], az: -74, el: 12, d: 1.45, mode: 'asm' },
+  { id: 'ring', name: 'Бронзовое кольцо', meta: 'полоса 2,4 мм · утоплена на 1 мм',
+    text: 'Верх нижней детали утоплен на 1 мм. Это та же деталь, печатается со сменой филамента на нужной высоте. Нижняя кромка крышки с фаской 0,5 мм, поэтому шов читается чётко.',
+    p: [44, 58.5, 18.9], az: 32, el: 8, d: 1.25, mode: 'asm' },
+  { id: 'snaps', name: 'Защёлки крышки', meta: '4 язычка 9 × 12 × 1,4 мм · зацеп 0,8 мм · скосы 45°',
+    text: 'Язычки идут вниз из пояска крышки и заходят в гнёзда в стенке низа. Скосы с обеих сторон: крышка садится со щелчком и снимается рывком вверх.',
+    p: [61.4, 2, 9.5], az: 62, el: 14, d: 1.45, mode: 'exp', lid: true },
+  { id: 'clamp', name: 'Прижим платы', meta: '4 площадки с бортиком 1,2 мм · 4 стойки Ø 5 мм',
+    text: 'Плата ложится углами на площадки, бортики не дают ей сдвинуться. Сверху её прижимают стойки крышки через контактные площадки отверстий. Винты не нужны.',
+    p: [54, -46.5, 1.6], az: 145, el: 34, d: 1.5, mode: 'exp' },
+  { id: 'ports', name: 'Проём разъёмов', meta: '105 × 19 мм · открыт вверх',
+    text: 'Один проём сзади на весь ряд разъёмов. Плата опускается в него сверху, крышка закрывает проём. Он же забирает воздух.',
+    p: [0, -57.7, 10], az: 180, el: 14, d: 1.6, mode: 'asm' },
+  { id: 'bay', name: 'Гнездо под рукоять', meta: 'байонет: Ø 30 и 4 паза до Ø 40 · поворот 45°',
+    text: 'Задел под следующий шаг. Рукоять вставляется в любом из четырёх положений через 90° и фиксируется поворотом до упора и щелчка. Вокруг — 615 отверстий продува NVMe.',
+    p: [0, 0, -20], az: 25, el: -55, d: 1.6, mode: 'asm' }
+];
+
+/* ---------- сцена ---------- */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: $('#cv'), antialias: true });
+} catch (e) {
+  $('#glfail').hidden = false;
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.localClippingEnabled = true;
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.75;
+const key = new THREE.DirectionalLight(0xffffff, 2.0);
+key.position.set(-220, 380, 260);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -220, right: 220, top: 220, bottom: -220, near: 10, far: 1400 });
+key.shadow.bias = -0.0005;
+scene.add(key, new THREE.HemisphereLight(0xffffff, 0x3a4440, 0.5));
+
+function stageColor() {
+  return new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--stage').trim() || '#DCE2DE');
+}
+scene.background = stageColor();
+const syncTheme = () => { scene.background = stageColor(); };
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
+new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+const camera = new THREE.PerspectiveCamera(28, 1, 1, 6000);
+const controls = new OrbitControls(camera, $('#cv'));
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 60;
+controls.maxDistance = 1400;
+
+// модель в мм, Z вверх -> three, Y вверх
+const root = new THREE.Group();
+root.rotation.x = -Math.PI / 2;
+scene.add(root);
+const gBottom = new THREE.Group(), gLid = new THREE.Group(), gBoard = new THREE.Group();
+root.add(gBottom, gLid, gBoard);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.ShadowMaterial({ opacity: 0.16 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -20.05;
+ground.receiveShadow = true;
+scene.add(ground);
+const bed = new THREE.Mesh(new THREE.BoxGeometry(300, 2, 170), new THREE.MeshStandardMaterial({ color: 0x3c4240, metalness: 0.6, roughness: 0.45 }));
+bed.position.y = -21.05;
+bed.receiveShadow = true;
+bed.visible = false;
+scene.add(bed);
+
+const cutPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
+const materials = [];
+const BOARD = ['pcb', 'heatsink', 'fan', 'connectors', 'nvme', 'button'];
+
+new GLTFLoader().load('scanner_case.glb', (g) => {
+  const meshes = [];
+  g.scene.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  for (const o of meshes) {
+    o.geometry = toCreasedNormals(o.geometry, rad(32));
+    o.castShadow = o.receiveShadow = true;
+    o.material = o.material.clone();
+    o.material.side = THREE.DoubleSide;
+    materials.push(o.material);
+    const holder = o.name === 'lid' ? gLid : BOARD.includes(o.name) ? gBoard : gBottom;
+    o.parent.remove(o);
+    holder.add(o);
+  }
+  setView('q', true);
+  apply();
+}, undefined, () => { $('#glfail').textContent = 'Модель не загрузилась. Обновите страницу.'; $('#glfail').hidden = false; });
+
+/* ---------- состояние ---------- */
+const state = { mode: 'asm', board: true, cut: false, cutX: 0, feat: null };
+// целевые положения групп (в мм модели)
+const targets = {
+  asm: { bottom: [0, 0, 0, 0], lid: [0, 0, 0, 0], board: [0, 0, 0] },
+  exp: { bottom: [0, 0, 0, 0], lid: [0, 0, 55, 0], board: [0, 0, 0] },
+  bed: { bottom: [-70, 0, 20, 0], lid: [70, 0, 40.6, Math.PI], board: [0, 0, 0] }
+};
+function apply() {
+  const t = targets[state.mode];
+  gBottom.userData.to = t.bottom;
+  gLid.userData.to = t.lid;
+  gBoard.visible = state.board && state.mode !== 'bed';
+  bed.visible = state.mode === 'bed';
+  ground.position.y = state.mode === 'bed' ? -2.05 : -20.05;
+  bed.position.y = -1.0;
+  for (const m of materials) m.clippingPlanes = state.cut ? [cutPlane] : [];
+  cutPlane.constant = state.cutX;
+  if (reduceMotion) for (const g of [gBottom, gLid]) place(g, 1);
+}
+function place(g, k) {
+  const to = g.userData.to;
+  if (!to) return;
+  g.position.x += (to[0] - g.position.x) * k;
+  g.position.y += (to[1] - g.position.y) * k;
+  g.position.z += (to[2] - g.position.z) * k;
+  g.rotation.x += (to[3] - g.rotation.x) * k;
+}
+
+/* ---------- камера ---------- */
+const VIEWS = { q: [34, 22, 3.0], front: [0, 6, 2.9], left: [-90, 6, 2.9], rear: [180, 10, 2.9], top: [0, 88, 2.8] };
+let fly = null;
+function camFor(az, el, dk, targetModel, onLid) {
+  const base = state.mode === 'bed' ? [0, 18, 0] : [0, 10, -2];
+  const target = new THREE.Vector3(...(targetModel ? modelToWorld(targetModel, onLid) : base));
+  const size = state.mode === 'bed' ? 300 : 135;
+  const dist = dk * size;
+  const pos = new THREE.Vector3(
+    target.x + dist * Math.cos(rad(el)) * Math.sin(rad(az)),
+    target.y + dist * Math.sin(rad(el)),
+    target.z - dist * Math.cos(rad(el)) * Math.cos(rad(az)));
+  return { pos, target };
+}
+function modelToWorld([x, y, z], onLid) {
+  const off = state.mode === 'exp' && onLid ? 55 : 0;
+  return [x, z + off, -y];
+}
+function go({ pos, target }, instant) {
+  if (instant || reduceMotion) {
+    camera.position.copy(pos); controls.target.copy(target); controls.update(); fly = null; return;
+  }
+  fly = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: target, s: performance.now() };
+}
+function setView(v, instant) {
+  const [az, el, d] = VIEWS[v];
+  go(camFor(az, el, d), instant);
+  for (const b of document.querySelectorAll('#views button')) b.setAttribute('aria-pressed', String(b.dataset.v === v));
+}
+
+/* ---------- узлы ---------- */
+const list = $('#feats');
+for (const f of FEATS) {
+  const li = document.createElement('li');
+  li.innerHTML = `<button type="button" class="feat" aria-pressed="false" data-id="${f.id}"><b>${f.name}</b><span class="m">${f.meta}</span><p>${f.text}</p></button>`;
+  list.appendChild(li);
+}
+list.addEventListener('click', (e) => {
+  const b = e.target.closest('.feat');
+  if (!b) return;
+  const f = FEATS.find((x) => x.id === b.dataset.id);
+  const same = state.feat === f.id;
+  state.feat = same ? null : f.id;
+  for (const x of list.querySelectorAll('.feat')) x.setAttribute('aria-pressed', String(!same && x === b));
+  if (same) { $('#marker').hidden = true; return; }
+  setMode(f.mode);
+  go(camFor(f.az, f.el, f.d, f.p, f.lid));
+  for (const x of document.querySelectorAll('#views button')) x.setAttribute('aria-pressed', 'false');
+  if (window.innerWidth <= 960) $('.stage').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+});
+
+/* ---------- кнопки ---------- */
+function setMode(m) {
+  state.mode = m;
+  $('#mAsm').setAttribute('aria-pressed', String(m === 'asm'));
+  $('#mExp').setAttribute('aria-pressed', String(m === 'exp'));
+  $('#mBed').setAttribute('aria-pressed', String(m === 'bed'));
+  apply();
+}
+$('#mAsm').onclick = () => { setMode('asm'); setView('q'); };
+$('#mExp').onclick = () => { setMode('exp'); go(camFor(38, 26, 3.4)); };
+$('#mBed').onclick = () => { state.feat = null; $('#marker').hidden = true; setMode('bed'); go(camFor(20, 38, 1.55)); };
+$('#views').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); });
+$('#tBoard').onclick = (e) => { state.board = !state.board; e.currentTarget.setAttribute('aria-pressed', String(state.board)); apply(); };
+$('#tCut').onclick = (e) => {
+  state.cut = !state.cut;
+  e.currentTarget.setAttribute('aria-pressed', String(state.cut));
+  $('#cutBox').hidden = !state.cut;
+  apply();
+  if (state.cut) go(camFor(62, 12, 3.0));
+};
+$('#cutX').oninput = (e) => { state.cutX = +e.target.value; $('#cutVal').textContent = e.target.value; apply(); };
+
+/* ---------- цикл ---------- */
+function resize() {
+  const c = renderer.domElement, w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * renderer.getPixelRatio()) || c.height !== Math.round(h * renderer.getPixelRatio())) {
+    renderer.setSize(w, h, false);
+    camera.aspect = w / Math.max(h, 1);
+    camera.updateProjectionMatrix();
+  }
+}
+const tmp = new THREE.Vector3();
+function frame(now) {
+  resize();
+  for (const g of [gBottom, gLid]) place(g, 0.14);
+  if (fly) {
+    const k = Math.min(1, (now - fly.s) / 650), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    camera.position.lerpVectors(fly.p0, fly.p1, e);
+    controls.target.lerpVectors(fly.t0, fly.t1, e);
+    if (k >= 1) fly = null;
+  }
+  controls.update();
+  const mk = $('#marker');
+  if (state.feat) {
+    const f = FEATS.find((x) => x.id === state.feat);
+    tmp.set(...modelToWorld(f.p, f.lid)).project(camera);
+    const c = renderer.domElement;
+    mk.hidden = tmp.z > 1;
+    mk.style.transform = `translate(${(tmp.x * 0.5 + 0.5) * c.clientWidth}px, ${(-tmp.y * 0.5 + 0.5) * c.clientHeight}px)`;
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
