@@ -67,8 +67,12 @@ def print_pose(name, m: Manifold):
     return m.translate([-(bb[0] + bb[3]) / 2, -(bb[1] + bb[4]) / 2, -bb[2]])
 
 
-def overhang_report(m: Manifold, limit_deg=45.0, bed_tol=0.25):
-    """Площадь граней, которые смотрят вниз круче limit_deg от вертикали (кроме стола)."""
+def overhang_report(m: Manifold, limit_deg=45.0, bed_tol=0.25, bridge_zone=None):
+    """Площадь граней, которые смотрят вниз круче limit_deg от вертикали (кроме стола).
+
+    bridge_zone(centroids) -> bool-маска: такие грани — потолки прорезей букв,
+    их считаем мостами отдельно и меряем самый длинный пролёт.
+    """
     v, f = to_arrays(m)
     tri = v[f]
     n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
@@ -78,9 +82,28 @@ def overhang_report(m: Manifold, limit_deg=45.0, bed_tol=0.25):
     on_bed = tri[:, :, 2].max(axis=1) < zmin + bed_tol
     thr = -math.cos(math.radians(90 - limit_deg))  # грань вниз круче limit -> nz < -sin(45°)
     bad = (nz < thr - 1e-3) & ~on_bed & (area > 1e-3)
-    # короткие «мосты» (горизонтальные потолки шириной до ~3 мм) отделяем отдельно
+    out = {}
+    if bridge_zone is not None:
+        zone = bridge_zone(tri.mean(axis=1))
+        br = bad & zone
+        bad = bad & ~zone
+        runs = []
+        tb = tri[br]
+        for zl in np.unique(np.round(tb[:, :, 2].mean(1), 1)):
+            sel = np.abs(tb[:, :, 2].mean(1) - zl) < 0.06
+            iv = sorted(zip(tb[sel][:, :, 0].min(1), tb[sel][:, :, 0].max(1)))
+            cur = list(iv[0])
+            for a, c in iv[1:]:
+                if a <= cur[1] + 0.3:
+                    cur[1] = max(cur[1], c)
+                else:
+                    runs.append(cur[1] - cur[0])
+                    cur = [a, c]
+            runs.append(cur[1] - cur[0])
+        out = {"мосты_в_буквах_мм2": round(float(area[br].sum()), 1),
+               "самый_длинный_мост_мм": round(float(max(runs)) if runs else 0.0, 1)}
     flat = bad & (nz < -0.999)
-    return {
+    return out | {
         "overhang_mm2": round(float(area[bad].sum()), 1),
         "flat_ceiling_mm2": round(float(area[flat].sum()), 1),
         "worst_deg_from_vertical": round(float(math.degrees(math.acos(max(-1.0, min(1.0, -nz[~on_bed].min())))) if (~on_bed).any() else 0.0), 1),
@@ -91,7 +114,7 @@ def overhang_report(m: Manifold, limit_deg=45.0, bed_tol=0.25):
 
 def checks(p: sc.Params, parts):
     rep = {}
-    assembled = parts["bottom"] + parts["lid"]
+    assembled = parts["bottom"] + parts["ring"] + parts["lid"]
     zones = sc.keepout(p)
     clash = {}
     clamp = Manifold.batch_boolean([
@@ -110,8 +133,10 @@ def checks(p: sc.Params, parts):
         sc.box(-hw, hw, -by - p.conn_overhang, by, p.pcb_t, p.z_part + 1) + \
         sc.box(-bx - p.btn_protrude, -bx, p.btn_y - 1.8, p.btn_y + 1.8, p.pcb_t, p.z_part + 1)
     rep["путь_установки_платы_мм3"] = round((parts["bottom"] ^ path).volume(), 2)
-    rep["зазор_низ_крышка_мм"] = round(parts["bottom"].min_gap(parts["lid"], 2.0), 3)
-    rep["пересечение_низ_крышка_мм3"] = round((parts["bottom"] ^ parts["lid"]).volume(), 3)
+    rep["пересечения_деталей_мм3"] = {
+        "низ×пояс": round((parts["bottom"] ^ parts["ring"]).volume(), 3),
+        "низ×крышка": round((parts["bottom"] ^ parts["lid"]).volume(), 3),
+        "пояс×крышка": round((parts["ring"] ^ parts["lid"]).volume(), 3)}
     # толкатель
     btn_face = -(bx + p.btn_protrude)
     btn_box = sc.box(btn_face - 0.01, btn_face, p.btn_y - 1.8, p.btn_y + 1.8, p.pcb_t, p.pcb_t + 2 * p.btn_z)
@@ -123,7 +148,30 @@ def checks(p: sc.Params, parts):
     rep["масса_г_при_100%"] = mass
     rep["объём_см3"] = {k: round(m.volume() / 1000, 1) for k, m in parts.items()}
     # печатаемость
-    rep["нависания"] = {k: overhang_report(print_pose(k, m)) for k, m in parts.items()}
+    _, tw = sc.text_contours(p)
+    y_face = sc.plan(p).poly(0.0)[:, 1].max()
+
+    def zone_for(name):
+        zc = {"lid": p.text_z_lid, "bottom": p.text_z_base}.get(name)
+        if zc is None:
+            return None
+        # центроиды в положении печати -> в координатах сборки
+        m = print_pose(name, parts[name])
+        bb0, bb1 = parts[name].bounding_box(), m.bounding_box()
+
+        def f(c):
+            c = c.copy()
+            if name == "lid":
+                c = c - [(bb1[0] + bb1[3]) / 2, (bb1[1] + bb1[4]) / 2, bb1[2]]
+                c = c * [1, -1, -1] + [(bb0[0] + bb0[3]) / 2, (bb0[1] + bb0[4]) / 2, bb0[5]]
+            else:
+                c = c - [(bb1[0] + bb1[3]) / 2, (bb1[1] + bb1[4]) / 2, bb1[2]] + \
+                    [(bb0[0] + bb0[3]) / 2, (bb0[1] + bb0[4]) / 2, bb0[2]]
+            return (np.abs(c[:, 0]) < tw / 2 + 1) & (np.abs(c[:, 2] - zc) < p.text_cap / 2 + 1) & \
+                (c[:, 1] > y_face - p.wall - 1)
+        return f
+
+    rep["нависания"] = {k: overhang_report(print_pose(k, m), bridge_zone=zone_for(k)) for k, m in parts.items()}
     rep["габарит_мм"] = [round(v, 1) for v in np.subtract(assembled.bounding_box()[3:], assembled.bounding_box()[:3])]
     rep["печатный_габарит_мм"] = {k: [round(v, 1) for v in np.subtract(print_pose(k, m).bounding_box()[3:],
                                                                          print_pose(k, m).bounding_box()[:3])]
@@ -138,9 +186,7 @@ def write_glb(p: sc.Params, parts, path):
     # кольцо-акцент — верх нижней части, печатается другим цветом: показываем отдельно
     zr = p.z_part - p.ring_h
     big = 400.0
-    allparts = {"bottom": parts["bottom"] ^ sc.box(-big, big, -big, big, -big, zr),
-                "ring": parts["bottom"] ^ sc.box(-big, big, -big, big, zr, big),
-                "lid": parts["lid"]}
+    allparts = dict(parts)
     allparts.update(sc.board_dummy(p))
     for name, m in allparts.items():
         v, f = to_arrays(m)
@@ -182,7 +228,7 @@ def main():
 
     stl_dir = os.path.join(a.out, "stl")
     os.makedirs(stl_dir, exist_ok=True)
-    names = {"bottom": "scanner_case_bottom.stl", "lid": "scanner_case_lid.stl"}
+    names = {"bottom": "scanner_case_bottom.stl", "ring": "scanner_case_ring.stl", "lid": "scanner_case_lid.stl"}
     for k, m in parts.items():
         write_stl(print_pose(k, m), os.path.join(stl_dir, names[k]))
     if not a.no_glb:
@@ -192,7 +238,6 @@ def main():
 
     rep = checks(p, parts)
     rep["вентиляция"] = getattr(sc.build, "stats", {})
-    rep["смена_цвета_для_кольца_мм_от_стола"] = round(p.z_part - p.ring_h - p.z_bot, 2)
     rep["параметры"] = asdict(p)
     with open(os.path.join(a.out, "docs", "report.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, ensure_ascii=False, indent=1)

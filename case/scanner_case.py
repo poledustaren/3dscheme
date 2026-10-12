@@ -25,8 +25,10 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+import os
+
 import numpy as np
-from manifold3d import CrossSection, JoinType, Manifold, Mesh, OpType
+from manifold3d import CrossSection, FillRule, JoinType, Manifold, Mesh, OpType
 
 SQ2 = math.sqrt(2.0)
 
@@ -65,9 +67,11 @@ class Params:
     top_radius: float = 3.0
     # нос: дуга в профиль (горизонтальный цилиндр вдоль X); 0 — без носа
     nose_r: float = 0.0
-    # кольцо-акцент между крышкой и низом: верх нижней части утоплен, печатается другим цветом
-    ring_h: float = 2.4
-    ring_d: float = 1.0
+    # стык: утопленный пояс между крышкой и низом (верх нижней детали, другим цветом),
+    # спереди в нём щели-жалюзи, как у образца
+    ring_h: float = 7.1             # высота пояса
+    ring_d: float = 1.0             # утопление пояса
+    ring_inner: float = 0.6         # спереди стенка пояса утолщена внутрь на столько
     part_gap: float = 1.0           # разъём корпуса над самым высоким разъёмом
 
     # ---- Стык крышки ----
@@ -105,9 +109,19 @@ class Params:
     grille_r: float = 46.0          # радиус круглой решётки в крышке
     hole_d: float = 2.0             # отверстия решётки
     hole_pitch: float = 3.0         # шаг колец и отверстий в кольце
-    perf_d: float = 2.4             # отверстия спереди: круг с остриями сверху и снизу
-    perf_pitch: float = 3.4
-    perf_half_w: float = 46.0
+    louver_y0: float = 46.0         # щели в поясе — спереди и на передних углах, от этой Y
+    louver_h: float = 3.0           # высота щели по вертикали (поперёк наклона ≈ 2,1)
+    louver_len: float = 11.0
+    louver_bar: float = 2.6         # перемычка между щелями
+    louver_ring_z: float = 16.5     # центр щелей в поясе (на середине стенки пояса)
+    # надпись на стороне выдува — сквозные буквы, они же вентиляция (два яруса, как у образца)
+    vent_text: str = "WELL"
+    text_font: str = "fonts/cinzel-latin-900-normal.woff"
+    text_cap: float = 11.0          # высота заглавных букв
+    text_track: float = 2.0         # добавочный межбуквенный интервал
+    text_grow: float = 0.15         # прорези шире контура буквы на столько (тонкие штрихи)
+    text_z_lid: float = 28.6        # центр строки на крышке
+    text_z_base: float = 6.0        # и на нижней детали
     floor_hole_d: float = 2.2
 
     # ---- Байонет под рукоять ----
@@ -504,6 +518,75 @@ def polygon_prisms(polys, axis, a0, a1):
     return manifold_from(np.array(verts), tris)
 
 
+class _FlatPen:
+    """Перо fontTools, которое раскладывает кривые глифа в ломаные."""
+
+    def __new__(cls, glyphset, steps=10):
+        from fontTools.pens.basePen import BasePen
+
+        class Pen(BasePen):
+            def __init__(self):
+                super().__init__(glyphset)
+                self.contours, self.cur = [], []
+
+            def _moveTo(self, pt):
+                self.cur = [pt]
+
+            def _lineTo(self, pt):
+                self.cur.append(pt)
+
+            def _curveToOne(self, p1, p2, p3):
+                p0 = self.cur[-1]
+                for t in np.linspace(0, 1, steps + 1)[1:]:
+                    a = (1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t * t, t ** 3
+                    self.cur.append(tuple(a[0] * np.array(p0) + a[1] * np.array(p1)
+                                          + a[2] * np.array(p2) + a[3] * np.array(p3)))
+
+            def _qCurveToOne(self, p1, p2):
+                p0 = self.cur[-1]
+                for t in np.linspace(0, 1, steps + 1)[1:]:
+                    self.cur.append(tuple((1 - t) ** 2 * np.array(p0) + 2 * (1 - t) * t * np.array(p1)
+                                          + t * t * np.array(p2)))
+
+            def _closePath(self):
+                if len(self.cur) > 2:
+                    self.contours.append(np.array(self.cur, float))
+                self.cur = []
+
+            _endPath = _closePath
+
+        return Pen()
+
+
+def text_contours(p: Params):
+    """Контуры надписи в мм: x — вдоль строки (центр в 0), y — вверх от низа заглавных."""
+    from fontTools.ttLib import TTFont
+    path = p.text_font if os.path.isabs(p.text_font) else os.path.join(os.path.dirname(__file__), p.text_font)
+    font = TTFont(path)
+    gs, cmap = font.getGlyphSet(), font.getBestCmap()
+    k = p.text_cap / font["OS/2"].sCapHeight
+    out, x = [], 0.0
+    for ch in p.vent_text:
+        g = gs[cmap[ord(ch)]]
+        pen = _FlatPen(gs)
+        g.draw(pen)
+        out += [c * k + [x, 0.0] for c in pen.contours]
+        x += g.width * k + p.text_track
+    width = x - p.text_track
+    return [c - [width / 2, 0.0] for c in out], width
+
+
+def text_cut(p: Params, z_center, y_face):
+    """Сквозные буквы в лицевой стенке (+Y). Читаются слева направо, если смотреть спереди."""
+    contours, _ = text_contours(p)
+    polys = [np.stack([-c[:, 0], z_center - p.text_cap / 2 + c[:, 1]], 1) for c in contours]
+    cs = CrossSection(polys, FillRule.NonZero)
+    if p.text_grow > 0:
+        cs = cs.offset(p.text_grow, JoinType.Round, 2.0, 16)
+    y0, y1 = y_face - p.wall - 0.8, y_face + 1.0
+    return cs.extrude(y1 - y0).rotate([90, 0, 0]).translate([0, y1, 0])
+
+
 def build(p: Params | None = None):
     p = p or Params()
     a0, bf0, br0 = p.outer_axes()
@@ -523,10 +606,18 @@ def build(p: Params | None = None):
     bottom = shell ^ box(-big, big, -big, big, p.z_bot - 1, zp)
     lid = shell ^ box(-big, big, -big, big, zp, p.z_top + 1)
 
-    # --- кольцо-акцент: верх нижней части утоплен на ring_d (печатается другим цветом),
-    #     нижняя кромка крышки — с фаской 0,5 мм, чтобы шов читался чётко
-    bottom -= sp(-1.0, zp - p.ring_h, zp + 1.0) - sp(p.ring_d, zp - p.ring_h - 1.0, zp + 2.0)
+    # --- пояс на стыке: верх нижней детали утоплен на ring_d (печатается другим цветом),
+    #     нижняя кромка крышки — с фаской 0,5 мм, крышка «парит» над поясом
+    zr = zp - p.ring_h
+    bottom -= sp(-1.0, zr, zp + 1.0) - sp(p.ring_d, zr - 1.0, zp + 2.0)
     lid -= sp(-1.0, zp - 1.0, zp + 0.5) - sp(0.5, zp - 2.0, zp + 1.0)
+    # спереди, где в поясе щели, его стенка утолщена внутрь; снизу упор под 45°
+    w_in = W + p.ring_inner
+    front_zone = box(-big, big, p.louver_y0 - 2.0, big, -big, big)
+    thick = (sp(W - 0.05, zr, zp) - sp(w_in, zr - 1.0, zp + 1.0)) + \
+        (sp(W - 0.05, zr - (p.ring_inner + 0.05) * 1.1, zr + 0.01)
+         - nose_frustum(p, W - 0.05, zr - (p.ring_inner + 0.05) * 1.1 - 0.001, w_in, zr + 0.011))
+    bottom += thick ^ front_zone
 
     # --- окно разъёмов сзади: открыто вверх, сверху его закрывает крышка
     hw = p.bx2 - p.conn_corner
@@ -548,6 +639,7 @@ def build(p: Params | None = None):
                  - nose_frustum(p, inner_edge, zp + 1.0 - 0.001, W - 0.05, zp + 1.0 + ch + 0.001))
     conn_ring = conn_ring ^ outer
     band -= box(-(hw + 1.5), hw + 1.5, -big, -(p.by2 - 6), zp - p.band_h - 1, zp + 0.6)
+    band -= box(-big, big, p.louver_y0 - 3.0, big, zp - p.band_h - 1, zp + 0.6)   # спереди щели пояса
 
     # --- защёлки: язычки из пояска вниз, крючок наружу; в стенке низа — гнездо
     arms, recesses, slits = [], [], []
@@ -704,31 +796,60 @@ def build(p: Params | None = None):
                           p.z_top - W - 1.0, p.z_top + 1.0)
     n_top = len(top_pts)
 
-    # спереди — перфорация выдува на нижней части и на крышке, в одну сетку
-    fw = p.perf_half_w
-    sx_, sz_ = p.perf_pitch, p.perf_pitch * math.sqrt(3) / 2
-    r_p = p.perf_d / 2
-    front_fields = {"bottom": (max(zb_v, p.pcb_t) + 0.5, zp - p.ring_h - 2.6),
-                    "lid": (zp + 3.0, zt_v - 1.6)}
-    n_front = 0
-    for part_name, (z_lo, z_hi) in front_fields.items():
-        polys = []
-        j0 = int(math.ceil((z_lo + r_p * SQ2) / sz_))
-        j1 = int(math.floor((z_hi - r_p * SQ2) / sz_))
-        for jz in range(j0, j1 + 1):
-            z = jz * sz_
-            x0 = 0.5 * sx_ * (jz % 2)
-            k = int((fw - r_p) // sx_) + 1
-            for ix in range(-k, k + 1):
-                x = x0 + ix * sx_
-                if abs(x) <= fw - r_p:
-                    polys.append(drop2(x, z, r_p))
-        n_front += len(polys)
-        holes = polygon_prisms(polys, "y", p.by2 + 3.0, bf0 + 3.0)
-        if part_name == "bottom":
-            bottom -= holes
-        else:
-            lid -= holes
+    # спереди — щели-жалюзи: ряд в поясе на стыке (спереди и на углах) и два ряда на лицевой стенке.
+    # Щель идёт сквозь стенку под 45° вверх внутрь: потолок щели печатается без мостов,
+    # а сверху внутрь не заглянуть.
+    pitch = p.louver_len + p.louver_bar
+    hh = p.louver_h / 2
+    louvers = []
+
+    def slot_hull(path_pts, normals, i_mid, half_t, zc):
+        # path_pts — точки середины стенки (инсет i_mid) вдоль щели; n — наружу
+        pts = []
+        for q, n in zip(path_pts, normals):
+            for dn in (-half_t - 0.6, half_t + 0.6):         # + наружу, − внутрь
+                z0 = zc - dn                                   # вверх внутрь под 45°
+                pts += [(q[0] + n[0] * dn, q[1] + n[1] * dn, z0 - hh),
+                        (q[0] + n[0] * dn, q[1] + n[1] * dn, z0 + hh)]
+        return Manifold.hull_points(np.array(pts))
+
+    # путь по середине стенки пояса: спереди от центра к углу и вниз по боку до louver_y0
+    i_mid = 0.5 * (p.ring_d + w_in)
+    ring_pts = plan(p).poly(i_mid)
+    half = ring_pts[:len(ring_pts) // 2]                 # передняя половина, от +X против часовой
+    path = half[(half[:, 0] >= -1e-6)][::-1]             # от верха (x≈0) к +X
+    path = np.vstack([[0.0, path[0, 1]], path]) if path[0, 0] > 1e-6 else path
+    path = path[path[:, 1] >= p.louver_y0]
+    seg = np.diff(path, axis=0)
+    cum = np.concatenate([[0.0], np.cumsum(np.hypot(seg[:, 0], seg[:, 1]))])
+    s_max = cum[-1] - 1.5
+    n_ring = 0
+    k = 0
+    while True:
+        s0 = pitch / 2 + k * pitch - p.louver_len / 2
+        s1 = s0 + p.louver_len
+        if s1 > s_max:
+            break
+        ss = np.linspace(s0, s1, 9)
+        q = np.stack([np.interp(ss, cum, path[:, 0]), np.interp(ss, cum, path[:, 1])], 1)
+        t = np.gradient(q, axis=0)
+        t /= np.linalg.norm(t, axis=1, keepdims=True)
+        nrm = np.stack([t[:, 1], -t[:, 0]], 1)            # наружу (обход против часовой)
+        for sxm in (1, -1):
+            qq, nn = q * [sxm, 1], nrm * [sxm, 1]
+            louvers.append(slot_hull(qq, nn, i_mid, 0.5 * (w_in - p.ring_d), p.louver_ring_z))
+            n_ring += 1
+        k += 1
+
+    bottom -= Manifold.batch_boolean(louvers, OpType.Add)
+
+    # надпись на стороне выдува: сквозные буквы в крышке и в нижней детали
+    y_face = plan(p).poly(0.0)[:, 1].max()
+    lid_text = text_cut(p, p.text_z_lid, y_face)
+    base_text = text_cut(p, p.text_z_base, y_face)
+    text_area = lid_text.volume() / (p.wall + 1.8)
+    lid -= lid_text
+    bottom -= base_text
 
     # дно — продув NVMe кольцами вокруг байонета
     floor_poly = plan(p).poly(din(p.z_bot + W + 0.02) + 2.0)
@@ -743,7 +864,8 @@ def build(p: Params | None = None):
     fl_pts = rings_of_holes((0.0, 0.0), 70.0, p.hole_pitch * 1.25, floor_keep)
     bottom -= polygon_prisms([circle(u, v, p.floor_hole_d / 2) for u, v in fl_pts], "z",
                              p.z_bot - 1.0, p.z_bot + W + 0.5)
-    stats = {"отверстий_сверху": n_top, "отверстий_спереди": n_front, "отверстий_в_дне": len(fl_pts)}
+    stats = {"отверстий_сверху": n_top, "щелей_в_поясе": n_ring,
+             "площадь_одной_надписи_мм2": round(text_area, 0), "отверстий_в_дне": len(fl_pts)}
 
     # --- байонет под рукоять
     zf_in = p.z_bot + W
@@ -766,8 +888,12 @@ def build(p: Params | None = None):
     bottom -= hole
     bottom -= Manifold.cylinder(1.0, p.bay_r + 0.8, p.bay_r - 0.2, 96).translate([0, 0, p.z_bot - 0.01])
 
+    # пояс — отдельная деталь: надевается на нижнюю перед крышкой
+    ring = bottom ^ box(-big, big, -big, big, zr, zp + 1.0)
+    bottom = bottom ^ box(-big, big, -big, big, p.z_bot - 1.0, zr)
+
     build.stats = stats
-    return {"bottom": bottom, "lid": lid}
+    return {"bottom": bottom, "ring": ring, "lid": lid}
 
 
 # ============================================================ макет платы

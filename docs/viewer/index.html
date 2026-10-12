@@ -130,16 +130,16 @@ h2{margin:0 0 12px;font:600 11px/1 var(--f-display);text-transform:uppercase;let
 
   <aside class="sheet">
     <header>
-      <p class="eyebrow">Orange Pi 6 Plus · корпус v1 · 12.10.2026</p>
+      <p class="eyebrow">Orange Pi 6 Plus · корпус v2 · 12.10.2026</p>
       <h1>Корпус сканера OPi6</h1>
-      <p class="lede">По образцу Aurora: серебристая крышка с фаской и круглой решёткой, тонкое бронзовое кольцо, строгий тёмный низ. Две печатные детали, ни одного винта. Плату держат площадки и стойки крышки, крышку — четыре защёлки, а кнопку питания нажимает гибкий язычок в стенке.</p>
+      <p class="lede">По образцу Aurora: серебристая крышка с фаской и круглой решёткой, бронзовый пояс со щелями на стыке, тёмный низ. На стороне выдува насквозь прорезано WELL в два яруса, буквы и есть вентиляция. Три печатные детали, ни одного винта: плату держат площадки и стойки крышки, крышку — четыре защёлки, пояс зажат между ними.</p>
     </header>
 
     <section class="figs" aria-label="В цифрах">
       <div class="fig"><b>127 × 118 × 61</b><span>мм, ширина × глубина × высота</span></div>
-      <div class="fig"><b>≈ 126 г</b><span>обе детали в PLA или PETG, ASA ≈ 109 г</span></div>
+      <div class="fig"><b>≈ 123 г</b><span>три детали в PLA или PETG, ASA ≈ 106 г</span></div>
       <div class="fig"><b>0 винтов</b><span>защёлки, прижим стойками, язычок кнопки</span></div>
-      <div class="fig"><b>0 поддержек</b><span>наклоны не круче 45°, проверено по сетке</span></div>
+      <div class="fig"><b>0 поддержек</b><span>наклоны до 45°, в буквах мосты до 9,4 мм</span></div>
     </section>
 
     <section>
@@ -166,7 +166,8 @@ h2{margin:0 0 12px;font:600 11px/1 var(--f-display);text-transform:uppercase;let
         <li><span class="tag ok">0 мм³</span><span>Пересечений с платой, разъёмами, кулером и NVMe нет. Плата опускается в низ корпуса сверху без помех.</span></li>
         <li><span class="tag ok">0,49 мм</span><span>Зазор от толкателя до кнопки PWR в покое. Нажатие ≈ 0,8 мм, усилие ≈ 4–5 Н.</span></li>
         <li><span class="tag ok">0,1 мм</span><span>Натяг стоек крышки на плату: она зажата и не болтается.</span></li>
-        <li><span class="tag ok">7 мм²</span><span>Всё, что круче 45°, — край углубления кнопки. Печатается без поддержек.</span></li>
+        <li><span class="tag ok">9,4 мм</span><span>Самый длинный мост — потолок прорези буквы. Остальное круче 45° — 7 мм² на краю углубления кнопки. Поддержки не нужны.</span></li>
+        <li><span class="tag ok">0 мм³</span><span>Низ, пояс и крышка не пересекаются друг с другом.</span></li>
       </ul>
     </section>
 
@@ -183,15 +184,16 @@ h2{margin:0 0 12px;font:600 11px/1 var(--f-display);text-transform:uppercase;let
 
     <section>
       <h2>Печать и сборка</h2>
-      <p class="spec">PETG или ASA · слой 0,2 мм · 3–4 периметра · заполнение 15 % · без поддержек<br>Низ — дном на стол, на высоте 37,7 мм смена филамента на бронзовый. Крышка — верхом на стол.</p>
+      <p class="spec">PETG или ASA · слой 0,2 мм · 3–4 периметра · заполнение 15 % · без поддержек<br>Низ — дном на стол. Крышка — верхом на стол. Пояс — как стоит, бронзовым или медным шёлковым пластиком, стенка 1 мм: два периметра.</p>
       <ol class="steps">
         <li>Опустите плату в низ корпуса разъёмами в проём сзади, углами на площадки.</li>
-        <li>Наденьте крышку сверху и прижмите до щелчка четырёх защёлок.</li>
+        <li>Наденьте пояс на низ, разрывом над разъёмами.</li>
+        <li>Наденьте крышку и прижмите до щелчка четырёх защёлок: они проходят сквозь пояс и зажимают его.</li>
         <li>Чтобы снять, потяните крышку вверх за край над разъёмами.</li>
       </ol>
     </section>
 
-    <p class="foot">STL обеих деталей, параметрический исходник на Python и отчёт проверок лежат в репозитории <a href="https://github.com/poledustaren/3dscheme/tree/claude/continue-collected-data-ub81vw" target="_blank" rel="noopener">poledustaren/3dscheme</a>, ветка claude/continue-collected-data-ub81vw. Плата и кулер на модели условные, по вашим замерам. Следующий шаг — рукоять на байонет в дне.</p>
+    <p class="foot">STL трёх деталей, параметрический исходник на Python и отчёт проверок лежат в репозитории <a href="https://github.com/poledustaren/3dscheme/tree/claude/continue-collected-data-ub81vw" target="_blank" rel="noopener">poledustaren/3dscheme</a>, ветка claude/continue-collected-data-ub81vw. Плата и кулер на модели условные, по вашим замерам. Следующий шаг — рукоять на байонет в дне.</p>
   </aside>
 </div>
 
@@ -214,21 +216,21 @@ const rad = THREE.MathUtils.degToRad;
 
 /* узлы: точка в координатах модели (мм, Z вверх), ракурс и режим */
 const FEATS = [
+  { id: 'well', name: 'Надпись WELL', meta: 'Cinzel Black · заглавные 11 мм · строка 52 мм · ≈ 245 мм² на ярус',
+    text: 'Сквозные буквы на стороне выдува, напротив рёбер радиатора: верхний ярус в крышке, нижний в низу. У W, E и L нет замкнутых внутренних частей, поэтому прорезь не оставляет островков. Сквозь буквы видно рёбра.',
+    p: [0, 60.2, 17], az: 6, el: 6, d: 1.5, mode: 'asm' },
+  { id: 'ring', name: 'Пояс со щелями', meta: 'отдельная деталь · 7,1 мм · утоплен на 1 мм · 8 щелей 11 × 3 мм',
+    text: 'Бронзовый пояс печатается отдельно и надевается на низ перед крышкой. Спереди и на углах в нём щели-жалюзи: каждая идёт сквозь стенку под 45° вверх внутрь, печатается без мостов и не даёт заглянуть внутрь сверху. Сзади пояс открыт над разъёмами.',
+    p: [30, 59.2, 16.5], az: 28, el: 8, d: 1.3, mode: 'asm', grp: 'ring' },
   { id: 'grille', name: 'Решётка сверху', meta: '755 отверстий Ø 2 мм · кольца с шагом 3 мм · Ø 92 мм',
-    text: 'Кулер берёт воздух сверху. Решётка из концентрических колец, как у образца; под ней 4 мм свободного места до кулера.',
-    p: [0, 1.2, 40.6], az: 20, el: 58, d: 1.7, mode: 'asm', lid: true },
-  { id: 'perf', name: 'Выдув спереди', meta: '133 отверстия Ø 2,4 мм с остриями · сетка 3,4 мм',
-    text: 'Рёбра радиатора дуют вперёд, в камеру глубиной 8 мм. Отверстия идут одной сеткой по низу и крышке. Острые верх и низ печатаются без мостов в обеих деталях. Остаток воздуха уходит в решётку в дне.',
-    p: [0, 59.2, 12], az: 10, el: 10, d: 1.6, mode: 'asm' },
+    text: 'Кулер берёт воздух сверху. Решётка из концентрических колец, как у образца, под ней 4 мм свободного места до кулера.',
+    p: [0, 1.2, 40.6], az: 20, el: 58, d: 1.7, mode: 'asm', grp: 'lid' },
   { id: 'button', name: 'Кнопка питания', meta: 'язычок 20 × 11 мм · толкатель 6 × 3 мм · зазор 0,49 мм',
     text: 'Язычок вырезан в левом борту наклонными щелями, корень у разъёмов. Толкатель нажимает PWR на плате напрямую, без пружин. Площадка утоплена на 0,6 мм, чтобы кнопку не задеть случайно; на ней точка под палец.',
     p: [-63.5, 38, 3.4], az: -74, el: 12, d: 1.45, mode: 'asm' },
-  { id: 'ring', name: 'Бронзовое кольцо', meta: 'полоса 2,4 мм · утоплена на 1 мм',
-    text: 'Верх нижней детали утоплен на 1 мм. Это та же деталь, печатается со сменой филамента на нужной высоте. Нижняя кромка крышки с фаской 0,5 мм, поэтому шов читается чётко.',
-    p: [44, 58.5, 18.9], az: 32, el: 8, d: 1.25, mode: 'asm' },
   { id: 'snaps', name: 'Защёлки крышки', meta: '4 язычка 9 × 12 × 1,4 мм · зацеп 0,8 мм · скосы 45°',
-    text: 'Язычки идут вниз из пояска крышки и заходят в гнёзда в стенке низа. Скосы с обеих сторон: крышка садится со щелчком и снимается рывком вверх.',
-    p: [61.4, 2, 9.5], az: 62, el: 14, d: 1.45, mode: 'exp', lid: true },
+    text: 'Язычки идут вниз из пояска крышки сквозь пояс и заходят в гнёзда в стенке низа. Скосы с обеих сторон: крышка садится со щелчком и снимается рывком вверх, пояс при этом зажат.',
+    p: [61.4, 2, 9.5], az: 62, el: 14, d: 1.45, mode: 'exp', grp: 'lid' },
   { id: 'clamp', name: 'Прижим платы', meta: '4 площадки с бортиком 1,2 мм · 4 стойки Ø 5 мм',
     text: 'Плата ложится углами на площадки, бортики не дают ей сдвинуться. Сверху её прижимают стойки крышки через контактные площадки отверстий. Винты не нужны.',
     p: [54, -46.5, 1.6], az: 145, el: 34, d: 1.5, mode: 'exp' },
@@ -287,15 +289,15 @@ controls.maxDistance = 1400;
 const root = new THREE.Group();
 root.rotation.x = -Math.PI / 2;
 scene.add(root);
-const gBottom = new THREE.Group(), gLid = new THREE.Group(), gBoard = new THREE.Group();
-root.add(gBottom, gLid, gBoard);
+const gBottom = new THREE.Group(), gRing = new THREE.Group(), gLid = new THREE.Group(), gBoard = new THREE.Group();
+root.add(gBottom, gRing, gLid, gBoard);
 
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.ShadowMaterial({ opacity: 0.16 }));
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -20.05;
 ground.receiveShadow = true;
 scene.add(ground);
-const bed = new THREE.Mesh(new THREE.BoxGeometry(300, 2, 170), new THREE.MeshStandardMaterial({ color: 0x3c4240, metalness: 0.6, roughness: 0.45 }));
+const bed = new THREE.Mesh(new THREE.BoxGeometry(310, 2, 300), new THREE.MeshStandardMaterial({ color: 0x3c4240, metalness: 0.6, roughness: 0.45 }));
 bed.position.y = -21.05;
 bed.receiveShadow = true;
 bed.visible = false;
@@ -328,7 +330,7 @@ function onModel(g) {
     o.material = o.material.clone();
     o.material.side = THREE.DoubleSide;
     materials.push(o.material);
-    const holder = o.name === 'lid' ? gLid : BOARD.includes(o.name) ? gBoard : gBottom;
+    const holder = o.name === 'lid' ? gLid : o.name === 'ring' ? gRing : BOARD.includes(o.name) ? gBoard : gBottom;
     o.parent.remove(o);
     holder.add(o);
   }
@@ -340,13 +342,15 @@ function onModel(g) {
 const state = { mode: 'asm', board: true, cut: false, cutX: 0, feat: null };
 // целевые положения групп (в мм модели)
 const targets = {
-  asm: { bottom: [0, 0, 0, 0], lid: [0, 0, 0, 0], board: [0, 0, 0] },
-  exp: { bottom: [0, 0, 0, 0], lid: [0, 0, 55, 0], board: [0, 0, 0] },
-  bed: { bottom: [-70, 0, 20, 0], lid: [70, 0, 40.6, Math.PI], board: [0, 0, 0] }
+  asm: { bottom: [0, 0, 0, 0], ring: [0, 0, 0, 0], lid: [0, 0, 0, 0] },
+  exp: { bottom: [0, 0, 0, 0], ring: [0, 0, 30, 0], lid: [0, 0, 62, 0] },
+  bed: { bottom: [-70, 62, 20, 0], ring: [0, -72, -13, 0], lid: [70, 62, 40.6, Math.PI] }
 };
+const LIFT = { lid: 62, ring: 30 };
 function apply() {
   const t = targets[state.mode];
   gBottom.userData.to = t.bottom;
+  gRing.userData.to = t.ring;
   gLid.userData.to = t.lid;
   gBoard.visible = state.board && state.mode !== 'bed';
   bed.visible = state.mode === 'bed';
@@ -354,7 +358,7 @@ function apply() {
   bed.position.y = -1.0;
   for (const m of materials) m.clippingPlanes = state.cut ? [cutPlane] : [];
   cutPlane.constant = state.cutX;
-  if (reduceMotion) for (const g of [gBottom, gLid]) place(g, 1);
+  if (reduceMotion) for (const g of [gBottom, gRing, gLid]) place(g, 1);
 }
 function place(g, k) {
   const to = g.userData.to;
@@ -368,10 +372,10 @@ function place(g, k) {
 /* ---------- камера ---------- */
 const VIEWS = { q: [34, 22, 3.0], front: [0, 6, 2.9], left: [-90, 6, 2.9], rear: [180, 10, 2.9], top: [0, 88, 2.8] };
 let fly = null;
-function camFor(az, el, dk, targetModel, onLid) {
-  const base = state.mode === 'bed' ? [0, 18, 0] : [0, 10, -2];
-  const target = new THREE.Vector3(...(targetModel ? modelToWorld(targetModel, onLid) : base));
-  const size = state.mode === 'bed' ? 300 : 135;
+function camFor(az, el, dk, targetModel, grp) {
+  const base = state.mode === 'bed' ? [0, 14, 0] : [0, 10, -2];
+  const target = new THREE.Vector3(...(targetModel ? modelToWorld(targetModel, grp) : base));
+  const size = state.mode === 'bed' ? 330 : 135;
   const dist = dk * size;
   const pos = new THREE.Vector3(
     target.x + dist * Math.cos(rad(el)) * Math.sin(rad(az)),
@@ -379,8 +383,8 @@ function camFor(az, el, dk, targetModel, onLid) {
     target.z - dist * Math.cos(rad(el)) * Math.cos(rad(az)));
   return { pos, target };
 }
-function modelToWorld([x, y, z], onLid) {
-  const off = state.mode === 'exp' && onLid ? 55 : 0;
+function modelToWorld([x, y, z], grp) {
+  const off = state.mode === 'exp' && grp ? LIFT[grp] : 0;
   return [x, z + off, -y];
 }
 function go({ pos, target }, instant) {
@@ -411,7 +415,7 @@ list.addEventListener('click', (e) => {
   for (const x of list.querySelectorAll('.feat')) x.setAttribute('aria-pressed', String(!same && x === b));
   if (same) { $('#marker').hidden = true; return; }
   setMode(f.mode);
-  go(camFor(f.az, f.el, f.d, f.p, f.lid));
+  go(camFor(f.az, f.el, f.d, f.p, f.grp));
   for (const x of document.querySelectorAll('#views button')) x.setAttribute('aria-pressed', 'false');
   if (window.innerWidth <= 960) $('.stage').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
 });
@@ -425,8 +429,8 @@ function setMode(m) {
   apply();
 }
 $('#mAsm').onclick = () => { setMode('asm'); setView('q'); };
-$('#mExp').onclick = () => { setMode('exp'); go(camFor(38, 26, 3.4)); };
-$('#mBed').onclick = () => { state.feat = null; $('#marker').hidden = true; setMode('bed'); go(camFor(20, 38, 1.55)); };
+$('#mExp').onclick = () => { setMode('exp'); go(camFor(38, 24, 3.7)); };
+$('#mBed').onclick = () => { state.feat = null; $('#marker').hidden = true; setMode('bed'); go(camFor(15, 48, 1.45)); };
 $('#views').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); });
 $('#tBoard').onclick = (e) => { state.board = !state.board; e.currentTarget.setAttribute('aria-pressed', String(state.board)); apply(); };
 $('#tCut').onclick = (e) => {
@@ -450,7 +454,7 @@ function resize() {
 const tmp = new THREE.Vector3();
 function frame(now) {
   resize();
-  for (const g of [gBottom, gLid]) place(g, 0.14);
+  for (const g of [gBottom, gRing, gLid]) place(g, 0.14);
   if (fly) {
     const k = Math.min(1, (now - fly.s) / 650), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     camera.position.lerpVectors(fly.p0, fly.p1, e);
@@ -461,7 +465,7 @@ function frame(now) {
   const mk = $('#marker');
   if (state.feat) {
     const f = FEATS.find((x) => x.id === state.feat);
-    tmp.set(...modelToWorld(f.p, f.lid)).project(camera);
+    tmp.set(...modelToWorld(f.p, f.grp)).project(camera);
     const c = renderer.domElement;
     mk.hidden = tmp.z > 1;
     mk.style.transform = `translate(${(tmp.x * 0.5 + 0.5) * c.clientWidth}px, ${(-tmp.y * 0.5 + 0.5) * c.clientHeight}px)`;
