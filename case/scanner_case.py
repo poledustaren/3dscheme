@@ -576,13 +576,139 @@ def text_contours(p: Params):
     return [c - [width / 2, 0.0] for c in out], width
 
 
-def text_cut(p: Params, z_center, y_face):
-    """Сквозные буквы в лицевой стенке (+Y). Читаются слева направо, если смотреть спереди."""
+def _row_intervals(polys, z, u_lo, u_hi):
+    """Отрезки прорези и стенки на высоте z: (дыры, материал), каждый — список (u0, u1)."""
+    cross = []
+    for P in polys:
+        a, b = P, np.roll(P, -1, axis=0)
+        m = (a[:, 1] <= z) != (b[:, 1] <= z)
+        if not m.any():
+            continue
+        t = (z - a[m, 1]) / (b[m, 1] - a[m, 1])
+        u = a[m, 0] + t * (b[m, 0] - a[m, 0])
+        w = np.where(b[m, 1] > a[m, 1], 1, -1)
+        cross += list(zip(u, w))
+    cross.sort()
+    holes, wind, start = [], 0, None
+    for u, w in cross:
+        was = wind != 0
+        wind += w
+        if not was and wind != 0:
+            start = u
+        elif was and wind == 0:
+            holes.append((start, u))
+    mat, cur = [], u_lo
+    for h0, h1 in holes:
+        if h0 > cur:
+            mat.append((cur, h0))
+        cur = max(cur, h1)
+    if cur < u_hi:
+        mat.append((cur, u_hi))
+    return holes, mat
+
+
+def bridge_islands(cs: CrossSection, up: int, dz=0.05, max_gap=3.0, min_width=0.5):
+    """Убирает «карманы» стенки, которые при печати начинаются в воздухе.
+
+    Плоскость стенки: u — вдоль строки, z — высота модели; up = +1, если деталь печатается
+    как стоит, −1 — если вверх дном. Слои идут в направлении печати. Отрезок стенки опирается,
+    если касается края строки или лежит на опёртом отрезке предыдущего слоя. Неопёртый
+    отрезок шире min_width — карман, например между стойкой L и загнутой вверх засечкой
+    её перекладины. Узкую прорезь между карманом и опёртой стенкой (саму засечку) заполняем
+    от этого слоя до её конца: карман становится консолью от стенки, буква теряет только
+    засечку. Кончики язычков внутри W (у́же 0,2 мм, растут под 70°) не трогаем: заполнение
+    съело бы штрих буквы. Возвращает исправленное сечение и список найденных мест.
+    """
+    polys = [np.asarray(P, dtype=float) for P in cs.to_polygons()]
+    if not polys:
+        return cs, []
+    allp = np.vstack(polys)
+    u_lo, u_hi = allp[:, 0].min() - 2.0, allp[:, 0].max() + 2.0
+    z_lo, z_hi = allp[:, 1].min(), allp[:, 1].max()
+    n = int(np.ceil((z_hi - z_lo) / dz)) + 2
+    zs = z_lo - dz / 2 + dz * np.arange(n)
+    if up < 0:
+        zs = zs[::-1]
+    rects, report, floods = [], [], []
+    prev = None                                   # [(u0, u1, опёрт)]
+    for z in zs:
+        holes, _ = _row_intervals(polys, z, u_lo, u_hi)
+        # продолжаем заполнять начатые засечки
+        live = []
+        for fl in floods:
+            hit = [h for h in holes if min(h[1], fl["g"][1]) - max(h[0], fl["g"][0]) > 1e-6]
+            if len(hit) == 1 and hit[0][1] - hit[0][0] <= max(max_gap, 1.5 * (fl["g"][1] - fl["g"][0])):
+                g = hit[0]
+                holes.remove(g)
+                rects.append((g[0] - 0.05, g[1] + 0.05, z - dz / 2 - 0.005, z + dz / 2 + 0.005))
+                fl["area"] += (g[1] - g[0]) * dz
+                fl["g"] = g
+                live.append(fl)
+            else:                                 # засечка кончилась: добираем её кончик
+                g = fl["g"]
+                zz = z - up * dz
+                rects.append((g[0] - 0.05, g[1] + 0.05, zz - dz, zz + dz))
+                fl["entry"]["заполнено_мм2"] = round(fl["area"], 2)
+        floods = live
+        mat, cur = [], u_lo
+        for h0, h1 in holes:
+            if h0 > cur:
+                mat.append((cur, h0))
+            cur = max(cur, h1)
+        if cur < u_hi:
+            mat.append((cur, u_hi))
+        sup = []
+        for a, b in mat:
+            edge = a <= u_lo + 1e-9 or b >= u_hi - 1e-9
+            below = [q for q in (prev or []) if min(b, q[1]) - max(a, q[0]) > 1e-6]
+            sup.append(edge or prev is None or any(q[2] for q in below))
+        for i, (a, b) in enumerate(mat):
+            if sup[i]:
+                continue
+            below = [q for q in (prev or []) if min(b, q[1]) - max(a, q[0]) > 1e-6]
+            if below:                             # продолжение уже найденного места
+                continue
+            entry = {"z": round(float(z), 2), "ширина_мм": round(b - a, 2)}
+            report.append(entry)
+            if b - a < min_width:
+                entry["исправлен"] = False
+                continue
+            best = None
+            for j in (i - 1, i + 1):
+                if 0 <= j < len(mat) and sup[j]:
+                    g = (mat[j][1], a) if j < i else (b, mat[j][0])
+                    if g[1] - g[0] <= max_gap and (best is None or g[1] - g[0] < best[1] - best[0]):
+                        best = g
+            if best is None:
+                entry["исправлен"] = False
+                continue
+            rects.append((best[0] - 0.05, best[1] + 0.05, z - dz / 2 - 0.005, z + dz / 2 + 0.005))
+            entry["исправлен"] = True
+            floods.append({"g": best, "area": (best[1] - best[0]) * dz, "entry": entry})
+            sup[i] = True
+        prev = [(a, b, s_) for (a, b), s_ in zip(mat, sup)]
+    if rects:
+        cs = cs - CrossSection([np.array([[a, c], [b, c], [b, d], [a, d]]) for a, b, c, d in rects],
+                               FillRule.NonZero)
+    return cs, report
+
+
+def text_cut(p: Params, z_center, y_face, up=1):
+    """Сквозные буквы в лицевой стенке (+Y). Читаются слева направо, если смотреть спереди.
+
+    up — направление печати детали вдоль Z модели: +1 низ (дном на стол), −1 крышка (верхом на стол).
+    """
     contours, _ = text_contours(p)
     polys = [np.stack([-c[:, 0], z_center - p.text_cap / 2 + c[:, 1]], 1) for c in contours]
     cs = CrossSection(polys, FillRule.NonZero)
     if p.text_grow > 0:
         cs = cs.offset(p.text_grow, JoinType.Round, 2.0, 16)
+    # карманы убираем для обоих направлений печати: тогда оба яруса WELL одинаковые
+    own, report = bridge_islands(cs, up)
+    other, _ = bridge_islands(cs, -up)
+    cs = (own ^ other).offset(-0.06, JoinType.Round, 2.0, 16).offset(0.06, JoinType.Round, 2.0, 16)  # без щелей тоньше 0,12 мм
+    text_cut.report = getattr(text_cut, "report", {})
+    text_cut.report["низ" if up > 0 else "крышка"] = report
     y0, y1 = y_face - p.wall - 0.8, y_face + 1.0
     return cs.extrude(y1 - y0).rotate([90, 0, 0]).translate([0, y1, 0])
 
@@ -845,8 +971,8 @@ def build(p: Params | None = None):
 
     # надпись на стороне выдува: сквозные буквы в крышке и в нижней детали
     y_face = plan(p).poly(0.0)[:, 1].max()
-    lid_text = text_cut(p, p.text_z_lid, y_face)
-    base_text = text_cut(p, p.text_z_base, y_face)
+    lid_text = text_cut(p, p.text_z_lid, y_face, up=-1)
+    base_text = text_cut(p, p.text_z_base, y_face, up=1)
     text_area = lid_text.volume() / (p.wall + 1.8)
     lid -= lid_text
     bottom -= base_text
@@ -892,6 +1018,7 @@ def build(p: Params | None = None):
     ring = bottom ^ box(-big, big, -big, big, zr, zp + 1.0)
     bottom = bottom ^ box(-big, big, -big, big, p.z_bot - 1.0, zr)
 
+    stats["надпись_карманы"] = getattr(text_cut, "report", {})
     build.stats = stats
     return {"bottom": bottom, "ring": ring, "lid": lid}
 

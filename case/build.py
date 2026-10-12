@@ -2,7 +2,7 @@
 Сборка корпуса: STL для печати, GLB для просмотра, отчёт проверок.
 
     python3 case/build.py            # всё
-    python3 case/build.py --no-glb   # только STL и проверки
+    python3 case/build.py --no-glb   # только STL, проект P1S и проверки
 
 Параметры правятся в scanner_case.Params или флагом --set имя=значение
 (можно несколько раз), например:  --set top_h=31 --set btn_from_corner=11.5
@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import math
 import os
@@ -21,6 +22,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 import scanner_case as sc  # noqa: E402
 import scanner_rig as rg  # noqa: E402
+import bambu_project as bp  # noqa: E402
 from manifold3d import Manifold  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -269,6 +271,26 @@ def write_glb(p: sc.Params, parts, path, extra=None):
         fh.write(scene.export(file_type="glb"))
 
 
+def plate_thumbnails(render_dir):
+    """Картинки столов для превью в Bambu Studio: docs/renders/p1s_plate_N.png, если они есть."""
+    from PIL import Image
+    out = {}
+    for i in range(1, len(bp.PLATES) + 1):
+        src = os.path.join(render_dir, f"p1s_plate_{i}.png")
+        if not os.path.exists(src):
+            continue
+        im = Image.open(src).convert("RGBA")
+        side = min(im.size)
+        im = im.crop(((im.width - side) // 2, (im.height - side) // 2, (im.width + side) // 2, (im.height + side) // 2))
+        pngs = []
+        for size in (512, 128):
+            buf = io.BytesIO()
+            im.resize((size, size), Image.LANCZOS).save(buf, "PNG", optimize=True)
+            pngs.append(buf.getvalue())
+        out[i] = tuple(pngs)
+    return out
+
+
 def parse_set(items):
     """--set имя=значение для корпуса, --set rig.имя=значение для рукояти и площадки."""
     p, r = sc.Params(), rg.Rig()
@@ -304,8 +326,11 @@ def main():
 
     stl_dir = os.path.join(a.out, "stl")
     os.makedirs(stl_dir, exist_ok=True)
-    for k, m in list(parts.items()) + list(rig_parts.items()):
-        write_stl(print_pose(k, m), os.path.join(stl_dir, STL_NAMES[k]))
+    posed = {k: print_pose(k, m) for k, m in list(parts.items()) + list(rig_parts.items())}
+    for k, m in posed.items():
+        write_stl(m, os.path.join(stl_dir, STL_NAMES[k]))
+    project = bp.write_project(posed, os.path.join(a.out, "print", "scanner_p1s.3mf"), "Сканер OPi6",
+                               plate_thumbnails(os.path.join(a.out, "docs", "renders")))
     if not a.no_glb:
         vdir = os.path.join(a.out, "docs", "viewer")
         os.makedirs(vdir, exist_ok=True)
@@ -316,6 +341,7 @@ def main():
     rep = checks(p, parts)
     rep["вентиляция"] = getattr(sc.build, "stats", {})
     rep["оснастка"] = rig_checks(p, r, parts, rig_parts)
+    rep["печать_P1S"] = dict(project, столы=bp.layout(posed))
     rep["параметры"] = asdict(p)
     rep["параметры_оснастки"] = asdict(r)
     with open(os.path.join(a.out, "docs", "report.json"), "w", encoding="utf-8") as fh:
