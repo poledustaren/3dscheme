@@ -20,6 +20,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
 import scanner_case as sc  # noqa: E402
+import scanner_rig as rg  # noqa: E402
 from manifold3d import Manifold  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -36,7 +37,17 @@ COLORS = {
     "connectors": ([0.70, 0.72, 0.74, 1.0], 0.9, 0.3),
     "nvme": ([0.08, 0.08, 0.09, 1.0], 0.2, 0.5),
     "button": ([0.05, 0.05, 0.05, 1.0], 0.1, 0.5),
+    "handle": ([0.10, 0.105, 0.11, 1.0], 0.0, 0.85),
+    "arm": ([0.22, 0.23, 0.24, 1.0], 0.1, 0.6),
+    "plate": ([0.22, 0.23, 0.24, 1.0], 0.1, 0.6),
+    "lidar": ([0.03, 0.03, 0.035, 1.0], 0.3, 0.25),
+    "d455": ([0.70, 0.72, 0.74, 1.0], 0.85, 0.3),
+    "d405": ([0.70, 0.72, 0.74, 1.0], 0.85, 0.3),
+    "maixcam": ([0.05, 0.05, 0.06, 1.0], 0.3, 0.3),
 }
+
+STL_NAMES = {"bottom": "scanner_case_bottom.stl", "ring": "scanner_case_ring.stl", "lid": "scanner_case_lid.stl",
+             "handle": "scanner_handle.stl", "arm": "scanner_arm.stl", "plate": "scanner_sensor_plate.stl"}
 
 
 def to_arrays(m: Manifold):
@@ -60,9 +71,14 @@ def write_stl(m: Manifold, path):
 
 
 def print_pose(name, m: Manifold):
-    """Положение для печати: низ — дном на стол, крышка — верхом на стол."""
+    """Положение для печати: низ — дном на стол, крышка — верхом на стол,
+    кронштейн — на боку, площадка — тылом на стол, рукоять — стоя."""
     if name == "lid":
         m = m.rotate([180, 0, 0])
+    elif name == "arm":
+        m = m.rotate([90, 0, 0])
+    elif name == "plate":
+        m = m.rotate([0, -90, 0])
     bb = m.bounding_box()
     return m.translate([-(bb[0] + bb[3]) / 2, -(bb[1] + bb[4]) / 2, -bb[2]])
 
@@ -179,7 +195,60 @@ def checks(p: sc.Params, parts):
     return rep
 
 
-def write_glb(p: sc.Params, parts, path):
+def rig_checks(p: sc.Params, r: rg.Rig, case_parts, rig_parts):
+    import trimesh
+    rep = {}
+    case = case_parts["bottom"] + case_parts["ring"] + case_parts["lid"]
+    sens = rg.sensors(p, r)
+    sensors_all = Manifold.batch_boolean(list(sens.values()), sc.OpType.Add)
+    f = rg.frame(p, r)
+    # байонет: в замке лепестки лежат на кольце с натягом, при вставке проходят пазы
+    rep["рукоять×корпус_в_замке_мм3"] = round((rig_parts["handle"] ^ case).volume(), 2)
+    unlocked = rg.handle(p, r, locked=False)
+    head = unlocked ^ sc.box(-60, 60, -60, 60, f["z_floor"] - 0.5, 0)
+    shadow = head.project().extrude(30).translate([0, 0, f["z_floor"] - 10])
+    rep["путь_вставки_байонета_мм3"] = round((shadow ^ case_parts["bottom"]).volume(), 2)
+    pairs = {
+        "кронштейн×корпус": (rig_parts["arm"], case),
+        "кронштейн×рукоять": (rig_parts["arm"], rig_parts["handle"]),
+        "площадка×корпус": (rig_parts["plate"], case),
+        "площадка×кронштейн": (rig_parts["plate"], rig_parts["arm"]),
+        "датчики×площадка": (sensors_all, rig_parts["plate"]),
+        "датчики×корпус_и_кронштейн": (sensors_all, case + rig_parts["arm"]),
+    }
+    rep["пересечения_мм3"] = {k: round((a ^ b).volume(), 2) for k, (a, b) in pairs.items()}
+    rep["поля_зрения"] = rg.fov_report(p, r)
+    # масса и баланс: печатные детали — сплошные (верхняя оценка) и ≈ 45 % при 3 периметрах и 20 % заполнения
+    items = []
+    for k, m in list(case_parts.items()) + list(rig_parts.items()):
+        v, fc = to_arrays(m)
+        tm = trimesh.Trimesh(v, fc, process=False)
+        k_fill = 1.0 if k in ("bottom", "ring", "lid") else 0.45
+        items.append((k, m.volume() / 1000 * DENSITY["PETG"] * k_fill, tm.center_mass))
+    items.append(("плата", 132.0, np.array([0.0, 0.0, 8.0])))
+    for k, m in sens.items():
+        bb = m.bounding_box()
+        items.append((k, float(rg.SENSOR_MASS[k]), (np.array(bb[:3]) + np.array(bb[3:])) / 2))
+    total = sum(w for _, w, _ in items)
+    com = sum(w * np.asarray(c) for _, w, c in items) / total
+    z_mid = f["z_tongue0"] - r.head_h - r.flare_h - r.grip_len / 2
+    x_hand = -(r.head_h + r.flare_h + r.grip_len / 2 - r.head_h - r.flare_h) * math.tan(math.radians(r.grip_tilt))
+    rep["масса_сборки_г"] = round(total)
+    rep["масса_по_деталям_г"] = {k: round(w) for k, w, _ in items}
+    rep["центр_масс_мм"] = [round(float(v), 1) for v in com]
+    rep["вылет_центра_масс_от_середины_рукояти_мм"] = round(float(com[0] - x_hand), 1)
+    rep["момент_на_кисть_Н·м"] = round(total / 1000 * 9.81 * float(com[0] - x_hand) / 1000, 2)
+    rep["нависания"] = {k: overhang_report(print_pose(k, m)) for k, m in rig_parts.items()}
+    rep["объём_см3"] = {k: round(m.volume() / 1000, 1) for k, m in rig_parts.items()}
+    rep["печатный_габарит_мм"] = {k: [round(v, 1) for v in np.subtract(print_pose(k, m).bounding_box()[3:],
+                                                                         print_pose(k, m).bounding_box()[:3])]
+                                  for k, m in rig_parts.items()}
+    allm = case + Manifold.batch_boolean(list(rig_parts.values()), sc.OpType.Add) + sensors_all
+    rep["габарит_сканера_мм"] = [round(v, 1) for v in np.subtract(allm.bounding_box()[3:], allm.bounding_box()[:3])]
+    return rep
+
+
+def write_glb(p: sc.Params, parts, path, extra=None):
     import trimesh
     from trimesh.visual.material import PBRMaterial
     scene = trimesh.Scene()
@@ -188,6 +257,7 @@ def write_glb(p: sc.Params, parts, path):
     big = 400.0
     allparts = dict(parts)
     allparts.update(sc.board_dummy(p))
+    allparts.update(extra or {})
     for name, m in allparts.items():
         v, f = to_arrays(m)
         tm = trimesh.Trimesh(v, f, process=False)
@@ -200,21 +270,26 @@ def write_glb(p: sc.Params, parts, path):
 
 
 def parse_set(items):
-    p = sc.Params()
-    types = {f.name: f.type for f in fields(sc.Params)}
+    """--set имя=значение для корпуса, --set rig.имя=значение для рукояти и площадки."""
+    p, r = sc.Params(), rg.Rig()
     for it in items or []:
         k, v = it.split("=", 1)
-        if k not in types:
+        target = p
+        if k.startswith("rig."):
+            target, k = r, k[4:]
+        if k not in {f.name for f in fields(target)}:
             raise SystemExit(f"нет параметра {k}")
-        cur = getattr(p, k)
+        cur = getattr(target, k)
         if isinstance(cur, tuple):
             val = tuple(float(x) for x in v.split(","))
         elif isinstance(cur, int):
             val = int(v)
+        elif isinstance(cur, str):
+            val = v
         else:
             val = float(v)
-        setattr(p, k, val)
-    return p
+        setattr(target, k, val)
+    return p, r
 
 
 def main():
@@ -223,22 +298,26 @@ def main():
     ap.add_argument("--no-glb", action="store_true")
     ap.add_argument("--out", default=ROOT)
     a = ap.parse_args()
-    p = parse_set(a.set)
+    p, r = parse_set(a.set)
     parts = sc.build(p)
+    rig_parts = rg.build_rig(p, r)
 
     stl_dir = os.path.join(a.out, "stl")
     os.makedirs(stl_dir, exist_ok=True)
-    names = {"bottom": "scanner_case_bottom.stl", "ring": "scanner_case_ring.stl", "lid": "scanner_case_lid.stl"}
-    for k, m in parts.items():
-        write_stl(print_pose(k, m), os.path.join(stl_dir, names[k]))
+    for k, m in list(parts.items()) + list(rig_parts.items()):
+        write_stl(print_pose(k, m), os.path.join(stl_dir, STL_NAMES[k]))
     if not a.no_glb:
         vdir = os.path.join(a.out, "docs", "viewer")
         os.makedirs(vdir, exist_ok=True)
-        write_glb(p, parts, os.path.join(vdir, "scanner_case.glb"))
+        extra = dict(rig_parts)
+        extra.update(rg.sensors(p, r))
+        write_glb(p, parts, os.path.join(vdir, "scanner_case.glb"), extra)
 
     rep = checks(p, parts)
     rep["вентиляция"] = getattr(sc.build, "stats", {})
+    rep["оснастка"] = rig_checks(p, r, parts, rig_parts)
     rep["параметры"] = asdict(p)
+    rep["параметры_оснастки"] = asdict(r)
     with open(os.path.join(a.out, "docs", "report.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, ensure_ascii=False, indent=1)
     show = {k: v for k, v in rep.items() if k != "параметры"}
