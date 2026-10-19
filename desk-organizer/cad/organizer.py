@@ -2,7 +2,8 @@
 Настольный органайзер «вчера · сегодня · завтра».
 
 Два рифлёных стакана под ручки по краям, между ними блок: сверху открытый карман
-под скрепки и стикеры, спереди два выдвижных ящика. На стаканах и на лицевой
+под скрепки и стикеры и два карманчика по бокам от него, спереди два выдвижных ящика,
+а между ящиками и стаканами открытые полочки в три яруса. На стаканах и на лицевой
 стороне блока утоплены таблички с надписями: слева «вчера», в центре «сегодня»,
 справа «завтра». Шрифт Montserrat SemiBold (SIL OFL), строчные.
 
@@ -35,19 +36,26 @@ class Params:
     rim_chamfer: float = 0.8       # фаска по кромке отверстий сверху
     block_front: float = -22.0     # лицевая плоскость блока (Y): стаканы выступают вперёд на 14 мм
     # карман сверху
-    pocket_w: float = 88.0
+    pocket_w: float = 64.0         # по ширине ниши ящиков: по бокам карманчики
     pocket_wall: float = 3.2       # стенки кармана спереди и сзади
     pocket_r: float = 12.0
     pocket_floor_z: float = 64.0
     # ниша ящиков
-    bay_w: float = 84.0
+    bay_w: float = 64.0            # по бокам ниши — полочки
     bay_floor: float = 2.0
     slot_h: float = 27.5
     shelf: float = 2.4             # полка между ящиками
     bay_back_wall: float = 2.4
+    # полочки сбоку от ящиков и карманчики сбоку от кармана: место между нишей и стаканом
+    side_wall: float = 2.0         # перегородка от ниши ящиков и от кармана
+    bore_wall_min: float = 2.2     # наименьшая стенка до отверстия стакана
+    side_tiers: int = 3            # ярусов полочек
+    side_shelf: float = 2.0        # толщина полочки
+    side_front_margin: float = 2.0  # проём полочки не доходит до стыка со стаканом на лицевой стороне
+    side_round: float = 1.5        # скругление углов в плане
     # ящик
     gap_side: float = 0.35
-    gap_top: float = 1.0           # над ящиком: запас на провис моста 84 мм
+    gap_top: float = 1.0           # над ящиком: запас на провис моста 64 мм
     gap_back: float = 0.5
     drawer_wall: float = 1.6
     drawer_front: float = 2.4
@@ -235,6 +243,56 @@ def chamfered_prism(cs: CrossSection, z0: float, z1: float, chamfer: float) -> M
     return body + lip
 
 
+def side_plan(p: Params, top: bool) -> CrossSection:
+    """План правого бокового отделения: полочек (top=False) или карманчика у кармана (top=True).
+
+    Между перегородкой ниши (или кармана) и отверстием стакана, со стенкой не тоньше bore_wall_min.
+    У полочек проём открыт на лицевую сторону, но не доходит до стыка блока со стаканом.
+    """
+    h = p.cup_pitch / 2
+    if top:
+        x0 = p.pocket_w / 2 + p.side_wall
+        y0, y1 = p.block_front + p.pocket_wall, p.block_back - p.pocket_wall
+    else:
+        x0 = p.bay_w / 2 + p.side_wall
+        y0, y1 = p.block_front - 1.0, p.block_back - p.bay_back_wall
+    cs = CrossSection.square([h - x0, y1 - y0]).translate([x0, y0])
+    cs -= CrossSection.circle(p.bore_r + p.bore_wall_min, SEG).translate([h, 0])
+    if not top:
+        x_lim = h - math.sqrt(p.cup_r ** 2 - p.block_front ** 2) - p.side_front_margin
+        cs -= CrossSection.square([h, p.side_front_margin + 1.0]).translate([x_lim, p.block_front - 1.0])
+    r = p.side_round
+    return cs.offset(-r, JoinType.Round, 2.0, 24).offset(r, JoinType.Round, 2.0, 24)
+
+
+def stepped_chamfer(cs: CrossSection, z0: float, z1: float, chamfer: float, steps: int = 8) -> Manifold:
+    """Призма любого сечения от z0 до z1 + 1 с фаской по верхней кромке ступеньками по chamfer/steps."""
+    m = cs.extrude(z1 - chamfer - z0).translate([0, 0, z0])
+    dz = chamfer / steps
+    for i in range(steps):
+        m += cs.offset(dz * (i + 1), JoinType.Round, 2.0, 24).extrude(dz + 0.01).translate([0, 0, z1 - chamfer + i * dz])
+    return m + cs.offset(chamfer + 1.0, JoinType.Round, 2.0, 24).extrude(1.0).translate([0, 0, z1])
+
+
+def side_tiers(p: Params) -> list[tuple[float, float]]:
+    """Ярусы полочек по высоте: от пола ниши до потолка верхнего ящика."""
+    z0, z1 = p.bay_floor, p.slot_z(1)[1]
+    t = (z1 - z0 - (p.side_tiers - 1) * p.side_shelf) / p.side_tiers
+    return [(z0 + i * (t + p.side_shelf), z0 + i * (t + p.side_shelf) + t) for i in range(p.side_tiers)]
+
+
+def side_cutters(p: Params) -> Manifold:
+    """Полочки и карманчики с обеих сторон."""
+    shelf, top = side_plan(p, False), side_plan(p, True)
+    m = Manifold()
+    for plan in (shelf, shelf.mirror([1, 0])):
+        for z0, z1 in side_tiers(p):
+            m += plan.extrude(z1 - z0).translate([0, 0, z0])
+    for plan in (top, top.mirror([1, 0])):
+        m += stepped_chamfer(plan, p.pocket_floor_z, p.height, p.rim_chamfer)
+    return m
+
+
 def body(p: Params) -> Manifold:
     h = p.cup_pitch / 2
     m = outline(p).extrude(p.height)
@@ -251,6 +309,7 @@ def body(p: Params) -> Manifold:
     for i in (0, 1):
         z0, z1 = p.slot_z(i)
         m -= Manifold.cube([p.bay_w, y1 - y0 + 1.0, z1 - z0]).translate([-p.bay_w / 2, y0 - 1.0, z0])
+    m -= side_cutters(p)
     # таблички с надписями
     left, _ = label_cutter(p, p.word_left, p.rib_h + p.panel_below_rib)
     right, _ = label_cutter(p, p.word_right, p.rib_h + p.panel_below_rib)

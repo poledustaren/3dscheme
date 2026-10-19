@@ -24,7 +24,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import organizer as og  # noqa: E402
 import bambu_project as bp  # noqa: E402
-from manifold3d import Manifold  # noqa: E402
+from manifold3d import JoinType, Manifold  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLA = 1.24          # г/см³
@@ -79,10 +79,21 @@ def checks(p: og.Params, parts: dict[str, Manifold]) -> dict:
     h = p.cup_pitch / 2
     y0, y1 = p.bay_y
     py0, py1 = p.block_front + p.pocket_wall, p.block_back - p.pocket_wall
-    # кратчайшее расстояние от отверстия стакана до ниши ящиков и до кармана (по плану, ось стакана в (h, 0))
-    bay_gap = h - p.bay_w / 2 - p.bore_r
-    near = np.array([min(max(h, -p.pocket_w / 2), p.pocket_w / 2), min(max(0.0, py0), py1)])
-    pocket_gap = float(np.hypot(h - near[0], 0 - near[1])) - p.bore_r
+    # полочки и карманчики: кратчайшая стенка до отверстия стакана по плану (ось стакана в (h, 0))
+    from manifold3d import CrossSection
+    bore = CrossSection.circle(p.bore_r, og.SEG).translate([h, 0])
+    side_gap = {}
+    for name, top in (("полочки", False), ("карманчики", True)):
+        plan = og.side_plan(p, top)
+        side_gap[name] = next((round(w, 2) for w in np.arange(0.0, 5.0, 0.05)
+                               if (plan ^ bore.offset(w + 0.05, JoinType.Round, 2.0, 96)).area() > 1e-3), None)
+    shelf = og.side_plan(p, False)
+    front = shelf ^ CrossSection.square([h, 0.5]).translate([0, p.block_front])
+    fb = front.bounds()
+    # полочки не должны прорезать наружные стенки: всё, что дальше 1,5 мм от плана корпуса внутрь, кроме проёма спереди
+    # выше верха корпуса фаска режет воздух — считаем только до z = height
+    inner = og.outline(p).offset(-1.5, JoinType.Round, 2.0, 48).extrude(p.height)
+    beyond = (og.side_cutters(p) - inner) ^ Manifold.cube([2 * h + 80, 200, p.height + 4.99]).translate([-h - 40, p.block_front + 2.0, -5])
     words = {}
     for side, word, depth in (("левый стакан", p.word_left, None), ("центр", p.word_center, p.panel_depth_center),
                               ("правый стакан", p.word_right, None)):
@@ -107,9 +118,18 @@ def checks(p: og.Params, parts: dict[str, Manifold]) -> dict:
                            round(hgt - p.drawer_floor, 1)],
         "зазоры_ящика_мм": {"бок": p.gap_side, "верх": p.gap_top, "зад": p.gap_back},
         "пересечения": clash,
+        "полочки": {"ярусов_с_каждой_стороны": p.side_tiers,
+                    "высота_яруса_мм": round(og.side_tiers(p)[0][1] - og.side_tiers(p)[0][0], 1),
+                    "проём_спереди_мм": round(fb[2] - fb[0], 1),
+                    "глубина_мм": round(p.bay_y[1] - p.block_front, 1),
+                    "площадь_яруса_мм2": round(shelf.area())},
+        "карманчики": {"глубина_мм": p.height - p.pocket_floor_z,
+                       "площадь_мм2": round(og.side_plan(p, True).area())},
         "стенки_мм": {
-            "отверстие_стакана_до_ниши_ящиков": round(bay_gap, 1),
-            "отверстие_стакана_до_кармана": round(pocket_gap, 1),
+            "полочки_до_отверстия_стакана": side_gap["полочки"],
+            "карманчики_до_отверстия_стакана": side_gap["карманчики"],
+            "перегородки_ниши_и_кармана": p.side_wall,
+            "полочки_и_карманчики_наружу_мм3": round(beyond.volume(), 3),
             "под_надписью_на_стакане": round(p.panel_r_cup - p.text_depth - p.bore_r, 2),
             "под_надписью_в_центре": round(p.pocket_wall - p.panel_depth_center - p.text_depth, 2),
         },
@@ -126,6 +146,8 @@ def assembly(p: og.Params) -> dict:
             "bore_r": p.bore_r,
             "pocket": [0.0, (p.block_front + p.block_back) / 2, p.pocket_floor_z],
             "pull": PULL,
+            "side_x": (p.bay_w / 2 + p.side_wall + p.cup_pitch / 2 - math.sqrt(p.cup_r ** 2 - p.block_front ** 2) - p.side_front_margin) / 2,
+            "tiers": og.side_tiers(p),
             "plate": [[it.center[0], it.center[1], it.part] for it in bp.PLATES[0].items]}
 
 

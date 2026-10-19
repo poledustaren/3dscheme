@@ -206,9 +206,11 @@ def desk_scene(props=True):
             pen((bx + dx, by + dy, bz), tilt, az, 138, 4.6, m, steel)
         yellow = material("notes", (0.95, 0.78, 0.12), rough=0.85)
         px, py, pz = asm["pocket"]
-        box("notes", (51, 38, 30), (px - 14, py - 1, pz + 15), yellow, (0, 0, math.radians(-6)))
-        box("notes2", (51, 38, 22), (px + 22, py + 3, pz + 11), material("notes2", (0.35, 0.75, 0.9), 0.85),
-            (0, 0, math.radians(9)))
+        box("notes", (51, 38, 30), (px, py, pz + 15), yellow, (0, 0, math.radians(-5)))
+        # мелочь на боковых полочках: ластик слева, флешка справа
+        sx, (lz0, lz1), (bz0, _) = asm["side_x"], asm["tiers"][1], asm["tiers"][0]
+        box("eraser", (13, 24, 8), (-sx, -10, lz0 + 4), material("eraser", (0.85, 0.42, 0.45), 0.7), (0, 0, math.radians(4)))
+        box("usb", (12, 30, 5), (sx, -8, bz0 + 2.5), material("usb", (0.03, 0.12, 0.35), 0.35), (0, 0, math.radians(-3)))
     area_light("window", (-900, -500, 700), (0, 0, 40), 900, 55, (1.0, 0.96, 0.9))
     area_light("fill", (700, -700, 300), (0, 0, 40), 600, 12, (0.92, 0.95, 1.0))
     area_light("top", (0, -100, 900), (0, 0, 0), 500, 10)
